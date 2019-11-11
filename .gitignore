@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Renviron
+*.Rproj
+*.R
+*.gif
+*.png
+OPHA1 .csv
+OPHA2 .csv
+*.Rmd
+Ex_11.nb.html
+*_Area.csv
