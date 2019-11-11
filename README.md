@@ -6,7 +6,7 @@ This exercise will provide information for using R for home range analysis inclu
 
 Exercise Webpage - https://chrismgentry.github.io/Home-Range-Analysis/ <br></br>
 
-# References for spatial analysis in R:
+# References for home range analysis in R:
 Below you will find resources and tutorials with will provide assistance with this exercise.
 
 ## Datasets
