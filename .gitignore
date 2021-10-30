@@ -7,9 +7,9 @@
 *.R
 *.gif
 *.png
-OPHA1 .csv
-OPHA2 .csv
-*.Rmd
+OPHA1.csv
+OPHA2.csv
 Ex_11.nb.html
 *_Area.csv
 previous_index.html
+previous_previous_index.html

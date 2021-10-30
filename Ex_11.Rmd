@@ -1,0 +1,389 @@
+---
+title: Home Range Analysis <br><small>Advanced Data Analytics</small></br>
+author: "Austin Peay State University"
+output:
+  html_notebook:
+    df_print: paged
+    rows.print: 10
+    theme: cosmo
+    highlight: breezedark
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document: default
+  html_document: 
+    df_print: paged
+    rows.print: 10
+    theme: cosmo
+    highlight: breezedark
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+editor_options:
+  chunk_output_type: inline
+  mode: gfm
+---
+
+```{=html}
+<style type="text/css">
+
+h1.title {
+  font-size: 40px;
+  font-family: "Times New Roman", Times, serif;
+  color: Black;
+  text-align: center;
+}
+
+h4.author { /* Header 4 - and the author and data headers use this too  */
+  font-size: 25px;
+  font-family: "Times New Roman", Times, serif;
+  font-weight: bold;
+  color: #D02349;
+  text-align: center;
+}
+
+body {
+  font-family: Helvetica;
+  font-size: 12pt;
+}
+
+.zoom {
+  transform-origin: 40% 50% 0;
+  transition: transform .2s;
+  margin: 0 auto;
+}
+.zoom img{
+	width:auto;
+	height:auto;	
+}
+.zoom:hover {
+  transform: scale(2);
+}
+
+th, td {padding: 5px;}
+
+</style>
+```
+
+# Introduction
+
+This exercise will build on the skills acquired in the [Mapping Basics](https://chrismgentry.github.io/Mapping-Basics/) and [Species Distribution Modeling](https://chrismgentry.github.io/Distribution-Maps/) exercises to perform **Home Range Analysis** and map the results. We will start by examining the structure of data used in home range analyses, we will look at ways to perform QA/QC checks on the location data, and finally various ways to visualize the data. One of the new skills we will discuss in this exercise is to create functions and loops to replicate analyses. 
+
+## Packages used in this exercise
+
+There are several specialty packages that will be used in this exercise due to the specific nature of the analyses. Some of these packages you will need to install while several others we have used in previous exercises and should already be installed.
+
+<p align="center">
+|```adehabitatHR``` | ```data.table``` | ```ggfortify``` | ```grid```| ```move``` |
+```moveVis``` | ```OpenStreetMap``` |<br></br> |```pbapply``` |
+```plotly``` | ```rgdal``` | ```sp``` | ```tidyverse``` | ```viridis``` |
+</p>
+
+To begin, we will install the following:
+
+```{r Packages, echo=TRUE, message=FALSE, warning=FALSE}
+packages<-c("adehabitatHR","data.table","ggfortify","grid","move","moveVis","OpenStreetMap","pbapply","plotly","rgdal","sp","tidyverse","viridis")
+sapply(packages, library, character.only=T)
+```
+
+# Dataset
+
+While we have seen that biological data can be obtained from sites such as [Dryad](https://datadryad.org/search) and [GBIF](https://www.gbif.org/), we need to obtain data with specific variables that might not be available on those sites. So to start this exercise, we will download a \*.csv file containing information for *Ophiophagus hannah* (King Cobra) from [movebank.org](https://www.movebank.org/panel_embedded_movebank_webapp?gwt_fragment=page%3Dsearch_map_linked%2CindividualIds%3D556574366%2B556574377%2Clat%3D14.546491968464133%2Clon%3D101.94869279261495%2Cz%3D11) that contains the appropriate variable to track movement from radio transmitter data. Because this data has to be downloaded we will need to go through the process of importing this information using the ```read.csv()``` command. Once we have imported the data we can view the structure. 
+
+> If forked, this data will be available in the Data folder within the repository. Additionally, ESRI Shapefile and Google KMZ formats will be included if you are interested in working with those data types.
+
+<details><summary><big>Import Dataset with ```read.csv```</big></summary>
+```{r data, echo=TRUE, message=FALSE, warning=FALSE}
+data <- read.csv("./Data/ophiophagus_hannah.csv")
+```
+</details>
+```{r structure, echo=TRUE, message=FALSE, warning=FALSE}
+head(data)
+```
+
+Notice that this dataset contains more than species information and x,y coordinates. While that information is important, this dataset also contains time and date information (timestamp), sensor type, and UTM data. In order to be sure that the dataset contains no outliers, we can plot the data using ```ggplot``` and ```plotly``` to interactively view the data.
+
+```{r plotly, echo=TRUE, fig.height=6, fig.width=8, message=FALSE, warning=FALSE}
+qaqc_plot <- ggplot() + geom_point(data=data, 
+                                   aes(utm.easting,utm.northing,
+                                       color=individual.local.identifier)) +
+                        labs(x="Easting", y="Northing") +
+                        guides(color=guide_legend("Identifier"))
+
+ggplotly(qaqc_plot)
+```
+
+With ```plotly```, similar to ```leaflet```, we have the ability to examine the spread of the data points and additional information from various columns. From this plot we can see that there are two individuals, OPHA1 and OPHA2, that were tracked for this study and have very little overlap in their apparent range.
+
+While we could continue with the current dataset, any analysis would calculate home range for the entire population rather than the individual. 
+
+<p align="center">
+MCP Analysis Example | KDE Analysis Example
+- | - 
+![](./mcp_all.png "MCP for all points") | ![](./kde_all.png "KDE for all points")
+</p>
+
+So here we will create a function and use the ```lapply``` command to apply a function over a list or vector dataset. Specifically, this function will take the original *data*set, split it into separate files based on the individual identifier, and create new \*.csv files using the identifier as the filename. 
+
+```{r lapply function, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+lapply(split(data, data$individual.local.identifier), 
+       function(x)write.csv(x, file = paste(x$individual.local.identifier[1],".csv", sep = ""), row.names = FALSE))
+```
+
+The anatomy of the function is as follows:
+
+- ```lapply()```, apply the function over a list
+- ```split()```, separates the data 
+- ```function()```, compose a series of steps to be applied to the data
+- ```write.csv()```, write a csv file
+- ```paste()```, create a character string to be used for the file name
+
+If you examine the root folder you will now find the addition of two new \*.csv files: OPHA1 and OPHA2. We will use these files to run our home range analyses. Alternatively, if you are provided a number of individual \*.csv files and need to quickly import the data into separate data frames you could write a **for loop** that would look something like this:
+
+```
+list <- gsub("\\.csv$","", list.files(pattern="\\.csv$"))
+
+for(i in list){
+  assign(i, read.csv(paste(i, ".csv", sep="")))
+}
+```
+
+All of the \*.csv files in your root directory will now be available in your global environment. However, since we used a looping function to create individual \*.csv files, we will need to make a list of those individual files created in the previous section to refer back to during the analysis when necessary.
+
+```{r list, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+files <- list.files(path = ".", pattern = "[OPHA]+[0-9]+", full.names = TRUE)
+```
+
+In the ```list.files``` command above, ```path = "."``` informs the locations, in this case the root directory, ```pattern =``` describes the way the files are named, in this case OPHA followed by a number between 0-9, and ```full.names``` describes how the files will be listed. 
+
+# Analysis
+
+To date, this will be one of the most code intensive exercises we have attempted. While the code itself is not difficult, the implementation is tedious due to the varying data types and analyses performed.
+
+## Imagery
+
+As we have in previous exercises we will use raster imagery to provide additional spatial detail to the analysis. While this information can come from a number of different sources, we will again use ```openstreetmap``` for this example. For those using Macs with java restrictions, use your preferred source for imagery.
+
+In order to create a bounding box for the imagery we will use the ```min``` and ```max``` values from the coordinates in the *data*set to compute those points. Although the data obtained from [www.movebank.org](http://www.movebank.org) contained both longitude/latitude and UTM values, this example will detail how to convert UTM to longitude/latitude coordinates in order to use ```openstreetmap```, and the raster imagery from longitude/latitude to UTM. This will be useful if you receive data only with UTM values. If your data contains longitude/latitude values there is no conversion required.
+
+```{r imagery, message=FALSE, warning=FALSE, echo=TRUE, fig.height=6, fig.width=8}
+utm_points <- cbind(data$utm.easting, data$utm.northing)
+utm_locations <- SpatialPoints(utm_points, 
+                 proj4string=CRS("+proj=utm +zone=47 +datum=WGS84"))
+proj_lat.lon <- as.data.frame(spTransform(
+                utm_locations, CRS("+proj=longlat +datum=WGS84")))
+colnames(proj_lat.lon) <- c("x","y")
+raster <- openmap(c(max(proj_lat.lon$y)+0.01, min(proj_lat.lon$x)-0.01), 
+                  c(min(proj_lat.lon$y)-0.01, max(proj_lat.lon$x)+0.01), 
+                  type = "bing")
+raster_utm <- openproj(raster, 
+              projection = "+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
+```
+
+In the script above, ```utm_point``` is an x,y derived from the primary dataset, ```utm_locations``` set the projection to **UTM Zone 47**, ```proj_lat.lon``` converted the UTM points to longitude/latitude, ```raster``` uses the min/max x,y data to create a bounding box to retrieve the aerial imagery, and ```raster_utm``` reprojected the imagery back to **UTM Zone 47** consistent with the location in Thailand. Now we can use ```autoplot.OpenStreetMap``` to display the raster image file with the UTM locations as an overlay.
+
+```{r imagery plot, message=FALSE, warning=FALSE, echo=TRUE, fig.height=6, fig.width=6}
+autoplot.OpenStreetMap(raster_utm, expand = TRUE) + theme_bw() +
+  theme(legend.position="bottom") +
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+  geom_point(data=data, aes(utm.easting,utm.northing,
+             color=individual.local.identifier), size = 3, alpha = 0.8) +
+  theme(axis.title = element_text(face="bold")) + labs(x="Easting",
+        y="Northing") + guides(color=guide_legend("Identifier"))
+```
+
+## Home Range Analysis
+
+There are three basic types of home range analyses we will perform in this exercise: Minimum Convex Polygon (MCP), Kernel-Density Estimation (KDE), and Brownian Bridge Movement Model (BB). There are a number of different tuning parameters that can be applied these analyses, however in this exercise we will use the most basic versions of the analysis. 
+
+In the section above we use the ```lapply``` command to loop a function used to separate the original dataset into individual files. This is a useful tool, however, when the function loops through dozens or even hundreds of files, the process can take a long period of time to complete. Using the ```pblapply``` command adds a progress bar (i.e. **pb**) to the process which provides an estimated time for completion of the function. We will use a similar process to the one above, using the ```pblapply``` command to run MCP analysis on the individual \*.csv files. 
+
+### Minimum Convex Polygon
+
+A description of the steps within the following code will be discussed following the output. The process works by establishing the function and then running ```pblapply``` referring back to the **files** we created in the dataset portion of this exercise.
+
+```{r MCP plot, message=FALSE, warning=FALSE, echo=TRUE, fig.height=6, fig.width=6}
+mcp_raster <- function(filename){
+  data <- read.csv(file = filename)
+  x <- as.data.frame(data$utm.easting)
+  y <- as.data.frame(data$utm.northing)
+  xy <- c(x,y)
+  data.proj <- SpatialPointsDataFrame(xy,data, proj4string = CRS("+proj=utm +zone=12 +datum=WGS84 +units=m +no_defs"))
+  xy <- SpatialPoints(data.proj@coords)
+  mcp.out <- mcp(xy, percent=100, unout="ha")
+  mcp.points <- cbind((data.frame(xy)),data$individual.local.identifier)
+  colnames(mcp.points) <- c("x","y", "identifier")
+  mcp.poly <- fortify(mcp.out, region = "id")
+  units <- grid.text(paste(round(mcp.out@data$area,2),"ha"), x=0.85,  y=0.95,
+                     gp=gpar(fontface=4, col="white", cex=0.9), draw = FALSE)
+  mcp.plot <- autoplot.OpenStreetMap(raster_utm, expand = TRUE) + theme_bw() + theme(legend.position="none") +
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+    geom_polygon(data=mcp.poly, aes(x=mcp.poly$long, y=mcp.poly$lat), alpha=0.8) +
+    geom_point(data=mcp.points, aes(x=x, y=y)) + 
+    labs(x="Easting (m)", y="Northing (m)", title=mcp.points$identifier) +
+    theme(legend.position="none", plot.title = element_text(face = "bold", hjust = 0.5)) + 
+    annotation_custom(units)
+  mcp.plot
+}
+
+pblapply(files, mcp_raster)
+```
+
+The anatomy of the function above is as follows:
+```mcp_raster <- function(filename){...``` for each *file* listed from the project directory complete the following commands
+
+- ```read.csv()```, read the data from a given \*.csv file
+- xy, create a coordinate file of the easting and northing data
+- ```SpatialPointsDataFrame()```, project the data to UTM Zone 47
+- ```mcp()```, computes home range using the Minimum Convex Polygon estimator
+- ```fortify()```, turns a map into a data frame for plotting with ggplot2
+- ```grid.text()```, creates annotations for the map; in this case to show area
+- ```autoplot.OpenStreetMap()```, plotting for raster and vector data in ggplot2
+- ```pblapply()```, referencing the files list and function
+
+The rest of the information can be found by examing the help menu for the various commands or looking at the display options for each portion of the script.
+
+### Kernel-Density Estimation
+
+The same design above can be used to create KDE plots for each individual in the dataset. Because the process is essentially the same, only portions of the function that were not previously described will be discussed.
+
+```{r KDE plot, message=FALSE, warning=FALSE, echo=TRUE, fig.height=6, fig.width=6}
+kde_raster <- function(filename){
+  data <- read.csv(file = filename)
+  x <- as.data.frame(data$utm.easting)
+  y <- as.data.frame(data$utm.northing)
+  xy <- c(x,y)
+  data.proj <- SpatialPointsDataFrame(xy,data, proj4string = CRS("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs"))
+  xy <- SpatialPoints(data.proj@coords)
+  kde<-kernelUD(xy, h="href", kern="bivnorm", grid=100)
+  ver <- getverticeshr(kde, 95)
+  kde.points <- cbind((data.frame(data.proj@coords)),data$individual.local.identifier)
+  colnames(kde.points) <- c("x","y","identifier")
+  kde.poly <- fortify(ver, region = "id")
+  units <- grid.text(paste(round(ver$area,2)," ha"), x=0.85,  y=0.95,
+                     gp=gpar(fontface=4, col="white", cex=0.9), draw = FALSE)
+  kde.plot <- autoplot.OpenStreetMap(raster_utm, expand = TRUE) + theme_bw() + theme(legend.position="none") +
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+    geom_polygon(data=kde.poly, aes(x=kde.poly$long, y=kde.poly$lat), alpha = 0.8) +
+    geom_point(data=kde.points, aes(x=x, y=y)) +
+    labs(x="Easting (m)", y="Northing (m)", title=kde.points$identifier) +
+    theme(legend.position="none", plot.title = element_text(face = "bold", hjust = 0.5)) + 
+    annotation_custom(units)
+  kde.plot
+}
+
+pblapply(files, kde_raster)
+```
+
+The anatomy of the function above is as follows:
+```kde_raster <- function(filename){...``` for each *file* listed from the project directory complete the following commands
+
+- ```kernelUD()```, estimation of kernel home-range
+- ```getverticeshr()```, extract home-range contour
+
+The rest of the information can be found by examing the help menu for the various commands or looking at the display options for each portion of the script.
+
+### Brownian Bridge Movement
+
+Although this appears to be working backwards, in the previous two examples you have seen how to create a function that can be looped to run the analysis for a list fo files. For this analysis, we will create a conventional script for a single individual. Portions of the script that were not previously described will be discussed following the analysis.
+
+```{r bb plot, message=FALSE, warning=FALSE, echo=TRUE, fig.height=6, fig.width=6}
+OPHA1 <- read.csv("OPHA1.csv")
+date <- as.POSIXct(strptime(as.character(OPHA1$timestamp),"%Y-%m-%d %H:%M:%S", tz="Asia/Bangkok"))
+OPHA1$date <- date
+OPHA1.reloc <- cbind.data.frame(OPHA1$utm.easting, OPHA1$utm.northing,
+                                as.vector(OPHA1$individual.local.identifier),
+                                as.POSIXct(date))
+colnames(OPHA1.reloc) <- c("x","y","id","date")
+trajectory <- as.ltraj(OPHA1.reloc, date=date, id="OPHA1")
+sig1 <- liker(trajectory, sig2 = 58, rangesig1 = c(0, 5), plotit = FALSE)
+opha.traj <- kernelbb(trajectory, sig1 = .7908, sig2 = 58, grid = 100)
+bb_ver <- getverticeshr(opha.traj, 95)
+bb_poly <- fortify(bb_ver, region = "id", 
+                   proj4string = CRS("+proj=utm +zone=47+
+                                     datum=WGS84 +units=m +no_defs"))
+colnames(bb_poly) <- c("x","y","order","hole","piece","id","group")
+bb_image <- crop(opha.traj, bb_ver, 
+                 proj4string = CRS("+proj=utm +zone=47 +
+                                   datum=WGS84 +units=m +no_defs"))
+bb_units <- grid.text(paste(round(bb_ver$area,2)," ha"), x=0.85,  y=0.95,
+                   gp=gpar(fontface=4, col="white", cex=0.9), draw = FALSE)
+bb.plot <- autoplot.OpenStreetMap(raster_utm, expand = TRUE) + theme_bw() + theme(legend.position="none") +
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+  geom_tile(data=bb_image, 
+            aes(x=bb_image@coords[,1], y=bb_image@coords[,2],
+            fill = bb_image@data$ud)) +
+  geom_polygon(data=bb_poly, aes(x=x, y=y, group = group), color = "black", fill = NA) +
+  scale_fill_viridis_c(option = "inferno") + annotation_custom(bb_units) +
+  labs(x="Easting (m)", y="Northing (m)", title="OPHA1") +
+  theme(legend.position="none", plot.title = element_text(face = "bold", hjust = 0.5))
+bb.plot
+```
+
+The anatomy of the script above is as follows:
+
+- ```as.POSIXct()```, manipulate objects to represent calendar dates and times
+- ```cbind.data.frame()```, used to combine columns avoiding factorization
+- ```as.ltraj```, convert data to trajectory class
+- ```liker()```, used to find the maximum likelihood estimation of the parameter sig1 in *kernelbb()*
+- ```scale_fill_viridis_c()```, create color scale for continuous data
+
+The rest of the information can be found by examing the help menu for the various commands or looking at the display options for each portion of the script.
+
+> Try it yourself! Using the example script above, and following the example functions, create a looping function with ```pblapply``` to run the BB analysis for each individual in the files list.
+
+## Animate Trajectory Data
+
+The final analysis we will perform in this exercise is a visual animation of the relocation data. Using the data from above you can ```plot(trajectory)``` and see a plot of the relocation information for an individual. However, we can use the ```move``` and ```moveVis``` packages to create an animation of the relocations. 
+
+We need to begin by creating a *move* object containing relocations (x,y), time and date information (time), a projection string, individual identifier (animal), and sensor type (sensor). *See the description for ```move()``` in the help menu for optional information.*
+
+```{r move, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+opha.move <- move(x=OPHA1$location.long, 
+             y=OPHA1$location.lat, 
+             time=as.POSIXct(OPHA1$timestamp, 
+                             format="%Y-%m-%d %H:%M:%S", tz="Asia/Bangkok"), 
+             proj=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84"),
+             data=OPHA1, animal=OPHA1$individual.local.identifier, 
+             sensor=OPHA1$sensor.type)
+```
+
+With this information, we can now create the timing, number of frames, and animation for the relocations. First, to understand the time lag between the relocations we can use ```median(timeLag(opha.move, unit = "mins"))``` to calculate the median value. However, in the ```aling_move()``` function ther is an option to set the uniform scale manually or by using a fixed resolution: min, max, or mean. For simplicity, we will use the **max** temporal resolution.
+
+```{r movement, message=FALSE, warning=FALSE, echo=TRUE, results='hide'}
+movement <- align_move(opha.move, res = "max", digit = 0, unit = "secs")
+```
+
+With the data now on a uniform time scale we can create the frames and animation for the relocations. For this step I will use a basemap from [MapBox](https://www.mapbox.com/) which require token access through the use of their API. To do this you need to register with MapBox and create an access token. Then create a .Renviron file in your project folder. Copy the token information from MapBox and create an object in the .Renviron file such as `map_token = 'paste token here'` and add `map_token =  Sys.getenv('map_token')` to the script below. However using the `get_maptypes()` script you can see there are various map services and map types that can be used. A simple output would be to use `map_service = 'osm'` (OpenStreetMaps) and `map_type = 'topographic'` or other map types available by viewing `get_maptypes('owm')`. when using a basemap without token access the `map_token` option can be removed from the script below.
+
+> Warning, the number of frames, frames/second, and output file type will determine how long this process will take and how large the output file will be.
+
+```{r reloc frames, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+frames <- frames_spatial(movement, path_colours = "red",
+                         map_service = "mapbox", 
+                         map_type = "satellite",
+                         map_token =  Sys.getenv('map_token'),
+                         alpha = 0.5) %>% 
+  add_labels(x = "Longitude", y = "Latitude") %>%
+  add_northarrow() %>% 
+  add_scalebar(distance = 2) %>% 
+  add_timestamps(movement, type = "label") %>% 
+  add_progress()
+```
+
+```{r animated relocs, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+animate_frames(frames, fps = 5, overwrite = TRUE,
+               out_file = "./moveVis-2021fps.gif")
+```               
+
+![](./moveVis-2021fps.gif "Relocation Animation")
+               
+As you can see from the result above, even a ~12sec clip with <60 frames took nearly 5min to key, obtain base imagery, assign frames, and render. So keep that in mind when creating these animations. The output from this is stored in your root directory and can be used as an animation on other programs or in html documents.
+
+# YOUR TURN!
+
+Now it’s your turn! Although some of this might not be applicable to your thesis research, try this information out on a dataset of your choice from any of the sources above. If you can apply this to your thesis, then add it to your website! Otherwise create a new repository for your presentation on Thursday.
