@@ -28,3 +28,14 @@ Below you will find resources and tutorials with will provide assistance with th
 
 ## Helpful site for selecting color schemes
 - http://colorbrewer2.org
+
+## For Mac users with Java Complications
+- If you are unable to use `OpenStreeMap` due to Java issues try the following package/script for a basemap:
+```
+library('ggmap')
+
+stamen <- get_stamenmap(bbox = c(left = -87.4, bottom = 36.5, right = -87.3, top = 36.6),
+          zoom = 14, maptype = "terrain")
+
+ggmap(stamen)
+```
